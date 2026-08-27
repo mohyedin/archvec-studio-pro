@@ -896,7 +896,6 @@
     let currentPolygons = [];
     let currentLines = [];
     let currentArcs = [];
-    let currentLines = []; let currentArcs = [];
     let currentTexts = [];
     let currentDXF = "";
     let scale_m_per_px = 0.01405;
@@ -938,7 +937,7 @@
       else if (tabId !== 'tab3D' && is3DMode) toggle3DView();
     }
 
-    // Dropzone
+    // Dropzone & Full-Canvas Drag & Drop
     dropzone.addEventListener('click', () => fileInput.click());
     dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.borderColor = '#007acc'; });
     dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = '#444'; });
@@ -949,6 +948,15 @@
     });
     fileInput.addEventListener('change', (e) => {
       if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    // Global drag & drop on canvas and window
+    window.addEventListener('dragover', (e) => { e.preventDefault(); });
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        handleFile(e.dataTransfer.files[0]);
+      }
     });
 
     function handleFile(file) {
