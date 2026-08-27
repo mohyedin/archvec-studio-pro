@@ -278,3 +278,47 @@ def process_image(img_bytes, epsilon=2.0):
         'width': orig_w, 'height': orig_h, 'plan_type': plan_type, 'scale_m_per_px': scale_m_per_px,
         'lines': classified_lines, 'arcs': [], 'texts': texts, 'dxf': stream.getvalue()
     }
+
+from http.server import BaseHTTPRequestHandler
+import cgi
+
+class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_POST(self):
+        try:
+            ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
+            if ctype == 'multipart/form-data':
+                pdict['boundary'] = bytes(pdict['boundary'], 'utf-8')
+                pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
+                form = cgi.parse_multipart(self.rfile, pdict)
+                file_item = form.get('image', [None])[0]
+            else:
+                length = int(self.headers.get('content-length'))
+                file_item = self.rfile.read(length)
+
+            if not file_item:
+                raise ValueError("No image provided")
+
+            result = process_image(file_item)
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            # Ensure arcs is present even if empty
+            if 'arcs' not in result:
+                result['arcs'] = []
+                
+            self.wfile.write(json.dumps(result).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
