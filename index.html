@@ -893,6 +893,9 @@
     const fileInput = document.getElementById('fileInput');
 
     let currentImage = null;
+    let currentPolygons = [];
+    let currentLines = [];
+    let currentArcs = [];
     let currentLines = []; let currentArcs = [];
     let currentTexts = [];
     let currentDXF = "";
@@ -1118,7 +1121,9 @@
         if (!resp.ok) throw new Error("Status " + resp.status);
 
         const data = await resp.json();
-        currentLines = data.lines || []; currentArcs = data.arcs || [];
+        currentPolygons = data.polygons || [];
+        currentLines = data.lines || [];
+        currentArcs = data.arcs || [];
         currentTexts = data.texts || [];
         currentDXF = data.dxf || "";
         if (data.scale_m_per_px) {
@@ -1132,8 +1137,8 @@
           runClientNeuralOCR();
         }
 
-        document.getElementById('entityCount').innerText = `${currentPolygons.length} Polylines, ${currentTexts.length} Text Entities`;
-        logCmd(`Complete: ${currentPolygons.length} CAD polylines, ${currentTexts.length} native TEXT entities.`);
+        document.getElementById('entityCount').innerText = `${currentLines.length} Lines, ${currentTexts.length} Text Entities`;
+        logCmd(`Complete: ${currentLines.length} CAD Lines, ${currentTexts.length} native TEXT entities.`);
         drawScene();
       } catch (err) {
         logCmd(`Notice: Backend offline (${err.message}) - running local renderer.`);
@@ -1175,7 +1180,7 @@
         }
         if (detected.length > 0) {
           currentTexts = detected;
-          document.getElementById('entityCount').innerText = `${currentPolygons.length} Polylines, ${currentTexts.length} Text Entities`;
+          document.getElementById('entityCount').innerText = `${currentLines.length} Lines, ${currentTexts.length} Text Entities`;
           logCmd(`Neural OCR Success: Found ${detected.length} text annotations.`);
           drawScene();
         }
@@ -1255,24 +1260,41 @@
         ctx.globalAlpha = 1.0;
       }
 
-      // Polygons
-      for (const item of currentPolygons) {
-        const poly = item.pts;
-        const layer = item.layer || 'A-WALL';
-        if (!layersVisible[layer]) continue;
+      // CAD Vectors (Polygons & Lines)
+      if (currentPolygons && currentPolygons.length > 0) {
+        for (const item of currentPolygons) {
+          const poly = item.pts;
+          const layer = item.layer || 'A-WALL';
+          if (!layersVisible[layer]) continue;
 
-        ctx.strokeStyle = (layer === 'A-WALL') ? '#38bdf8' :
-                          (layer === 'A-FURN') ? '#00e5ff' :
-                          (layer === 'A-DIMS') ? '#ff3366' : '#ffcc00';
-        ctx.lineWidth = (layer === 'A-WALL') ? vectorLineWidth / zoom : (vectorLineWidth * 0.7) / zoom;
-        
-        ctx.beginPath();
-        for (let i = 0; i < poly.length; i++) {
-          if (i === 0) ctx.moveTo(poly[i].x, poly[i].y);
-          else ctx.lineTo(poly[i].x, poly[i].y);
+          ctx.strokeStyle = (layer === 'A-WALL') ? '#38bdf8' :
+                            (layer === 'A-FURN') ? '#fb923c' :
+                            (layer === 'A-DIMS') ? '#ff3366' : '#ffcc00';
+          ctx.lineWidth = (layer === 'A-WALL') ? vectorLineWidth / zoom : (vectorLineWidth * 0.7) / zoom;
+          
+          ctx.beginPath();
+          for (let i = 0; i < poly.length; i++) {
+            if (i === 0) ctx.moveTo(poly[i].x, poly[i].y);
+            else ctx.lineTo(poly[i].x, poly[i].y);
+          }
+          ctx.closePath();
+          ctx.stroke();
         }
-        ctx.closePath();
-        ctx.stroke();
+      } else if (currentLines && currentLines.length > 0) {
+        for (const l of currentLines) {
+          const layer = l.layer || 'A-WALL';
+          if (!layersVisible[layer]) continue;
+
+          ctx.strokeStyle = (layer === 'A-WALL') ? '#38bdf8' :
+                            (layer === 'A-FURN') ? '#fb923c' :
+                            (layer === 'A-DIMS') ? '#ff3366' : '#ffcc00';
+          ctx.lineWidth = (layer === 'A-WALL') ? vectorLineWidth / zoom : (vectorLineWidth * 0.7) / zoom;
+          
+          ctx.beginPath();
+          ctx.moveTo(l.x1, l.y1);
+          ctx.lineTo(l.x2, l.y2);
+          ctx.stroke();
+        }
       }
 
       // Texts with High Visibility
@@ -1456,7 +1478,7 @@
 
     // DXF Download
     function downloadDXF() {
-      if (!currentDXF && currentPolygons.length === 0) {
+      if (!currentDXF && currentLines.length === 0) {
         logCmd("Error: No CAD vectors to export.");
         return;
       }
@@ -1487,7 +1509,7 @@
     }
 
     function downloadSVG() {
-      if (currentPolygons.length === 0) return;
+      if (currentLines.length === 0) return;
       const w = currentImage ? currentImage.width : 800;
       const h = currentImage ? currentImage.height : 600;
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="background:#181818">\n`;

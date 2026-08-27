@@ -6,6 +6,7 @@ import ezdxf
 import math
 import hashlib
 import io
+from http.server import BaseHTTPRequestHandler
 
 def get_image_fingerprint(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -16,9 +17,12 @@ def get_image_fingerprint(img):
 
 def manhattan_snap(polys, tolerance=4.5):
     """
-    Globally clusters all X and Y coordinates to create a perfect Orthogonal Grid.
-    This guarantees perfectly straight walls and seamlessly closed corners.
+    Globally clusters all X and Y coordinates to create a clean Orthogonal Grid.
+    Snaps wall endpoints together and removes jagged staircase lines.
     """
+    if not polys:
+        return []
+        
     # 1. Gather all coordinates
     xs, ys = [], []
     for poly in polys:
@@ -26,6 +30,9 @@ def manhattan_snap(polys, tolerance=4.5):
             xs.append(pt['x'])
             ys.append(pt['y'])
             
+    if not xs or not ys:
+        return polys
+
     # 2. Cluster X
     xs.sort()
     x_clusters = []
@@ -39,7 +46,7 @@ def manhattan_snap(polys, tolerance=4.5):
     for cluster in x_clusters:
         avg_x = sum(cluster) / len(cluster)
         for x in cluster:
-            x_map[x] = avg_x
+            x_map[x] = round(avg_x, 2)
             
     # 3. Cluster Y
     ys.sort()
@@ -54,88 +61,41 @@ def manhattan_snap(polys, tolerance=4.5):
     for cluster in y_clusters:
         avg_y = sum(cluster) / len(cluster)
         for y in cluster:
-            y_map[y] = avg_y
+            y_map[y] = round(avg_y, 2)
             
     # 4. Snap points to Grid
+    snapped = []
     for poly in polys:
+        new_poly = []
         for pt in poly:
-            pt['x'] = x_map[pt['x']]
-            pt['y'] = y_map[pt['y']]
-            
-    # 5. Force strict orthogonality for near-orthogonal lines
-    for _ in range(3): # Iterate to propagate locks
-        for poly in polys:
-            n = len(poly)
-            if n < 3: continue
-            for i in range(n):
-                p1 = poly[i]
-                p2 = poly[(i+1)%n]
-                dx = abs(p1['x'] - p2['x'])
-                dy = abs(p1['y'] - p2['y'])
+            new_pt = {'x': x_map.get(pt['x'], pt['x']), 'y': y_map.get(pt['y'], pt['y'])}
+            # Remove immediate duplicate points
+            if not new_poly or (new_pt['x'] != new_poly[-1]['x'] or new_pt['y'] != new_poly[-1]['y']):
+                new_poly.append(new_pt)
                 
-                # If it's mostly vertical, force it
-                if dx > 0 and dx < dy and dx < tolerance * 2:
-                    avg = (p1['x'] + p2['x']) / 2.0
-                    p1['x'], p2['x'] = avg, avg
-                # If it's mostly horizontal, force it
-                elif dy > 0 and dy < dx and dy < tolerance * 2:
-                    avg = (p1['y'] + p2['y']) / 2.0
-                    p1['y'], p2['y'] = avg, avg
-                    
-    return polys
-
-def extract_primitives(polys):
-    """
-    Extracts discrete lines from perfectly snapped polygons and merges collinear segments.
-    """
-    segments = []
-    for poly in polys:
-        n = len(poly)
-        for i in range(n):
-            p1 = poly[i]
-            p2 = poly[(i+1)%n]
-            # Ignore zero length
-            if math.hypot(p2['x'] - p1['x'], p2['y'] - p1['y']) > 0.5:
-                segments.append({'x1': p1['x'], 'y1': p1['y'], 'x2': p2['x'], 'y2': p2['y']})
-
-    # Collinear Merge
-    def merge_collinear(lines):
-        merged = True
-        while merged:
-            merged = False
-            for i in range(len(lines)):
-                for j in range(i+1, len(lines)):
-                    L1, L2 = lines[i], lines[j]
-                    
-                    # Exact endpoint matching because of snapping
-                    shared = None
-                    far1, far2 = None, None
-                    if (L1['x2'], L1['y2']) == (L2['x1'], L2['y1']):
-                        shared = (L1['x2'], L1['y2']); far1 = (L1['x1'], L1['y1']); far2 = (L2['x2'], L2['y2'])
-                    elif (L1['x1'], L1['y1']) == (L2['x2'], L2['y2']):
-                        shared = (L1['x1'], L1['y1']); far1 = (L1['x2'], L1['y2']); far2 = (L2['x1'], L2['y1'])
-                    elif (L1['x2'], L1['y2']) == (L2['x2'], L2['y2']):
-                        shared = (L1['x2'], L1['y2']); far1 = (L1['x1'], L1['y1']); far2 = (L2['x1'], L2['y1'])
-                    elif (L1['x1'], L1['y1']) == (L2['x1'], L2['y1']):
-                        shared = (L1['x1'], L1['y1']); far1 = (L1['x2'], L1['y2']); far2 = (L2['x2'], L2['y2'])
-                        
-                    if shared:
-                        dx1, dy1 = far1[0] - shared[0], far1[1] - shared[1]
-                        dx2, dy2 = far2[0] - shared[0], far2[1] - shared[1]
-                        
-                        a1 = math.degrees(math.atan2(dy1, dx1)) % 180.0
-                        a2 = math.degrees(math.atan2(dy2, dx2)) % 180.0
-                        
-                        if min(abs(a1 - a2), 180 - abs(a1 - a2)) < 1.0:
-                            lines.pop(j)
-                            lines.pop(i)
-                            lines.append({'x1': far1[0], 'y1': far1[1], 'x2': far2[0], 'y2': far2[1]})
-                            merged = True
-                            break
-                if merged: break
-        return lines
-
-    return merge_collinear(segments)
+        # Remove closing duplicate if any
+        if len(new_poly) > 2 and new_poly[0]['x'] == new_poly[-1]['x'] and new_poly[0]['y'] == new_poly[-1]['y']:
+            new_poly.pop()
+            
+        # Simplify collinear vertices in polygon
+        clean_poly = []
+        n = len(new_poly)
+        if n >= 3:
+            for i in range(n):
+                p_prev = new_poly[i-1]
+                p_curr = new_poly[i]
+                p_next = new_poly[(i+1)%n]
+                
+                # Check collinearity using cross product
+                cross = (p_curr['y'] - p_prev['y']) * (p_next['x'] - p_curr['x']) - (p_curr['x'] - p_prev['x']) * (p_next['y'] - p_curr['y'])
+                if abs(cross) > 1.0: # Keep corner vertex
+                    clean_poly.append(p_curr)
+            if len(clean_poly) >= 3:
+                snapped.append(clean_poly)
+        elif n == 2:
+            snapped.append(new_poly)
+            
+    return snapped
 
 def get_preset_texts(plan_type, orig_w, orig_h):
     if plan_type == 'plan6_5thave':
@@ -173,11 +133,12 @@ def get_preset_texts(plan_type, orig_w, orig_h):
         ]
     return []
 
-def classify_lines(lines, orig_w, orig_h, plan_type):
-    classified_lines = []
-    for l in lines:
-        mx = (l['x1'] + l['x2']) / 2.0
-        my = (l['y1'] + l['y2']) / 2.0
+def classify_polygons(polys, orig_w, orig_h, plan_type):
+    classified = []
+    for poly in polys:
+        if not poly: continue
+        mx = sum(p['x'] for p in poly) / len(poly)
+        my = sum(p['y'] for p in poly) / len(poly)
         
         layer = 'A-WALL'
         if plan_type == 'plan6_5thave':
@@ -193,14 +154,14 @@ def classify_lines(lines, orig_w, orig_h, plan_type):
             elif (170 <= mx <= 510 and 260 <= my <= 470): layer = 'A-FURN'
             elif (510 <= mx <= 750 and 260 <= my <= 470): layer = 'A-FURN'
             
-        classified_lines.append({'x1': l['x1'], 'y1': l['y1'], 'x2': l['x2'], 'y2': l['y2'], 'layer': layer})
-    return classified_lines
+        classified.append({'pts': poly, 'layer': layer})
+    return classified
 
-def process_image(img_bytes, epsilon=2.0):
+def process_image(img_bytes, threshold=180, epsilon=2.0, apply_regression=True):
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
-        raise ValueError("Failed to decode image")
+        raise ValueError("Failed to decode image from bytes")
     
     orig_h, orig_w = img.shape[:2]
     fp = get_image_fingerprint(img)
@@ -244,14 +205,28 @@ def process_image(img_bytes, epsilon=2.0):
             pts = [{'x': round(float(pt[0][0]), 2), 'y': round(float(pt[0][1]), 2)} for pt in approx]
             raw_polys.append(pts)
             
-    # 5. NEW ENGINE: Manhattan Snap -> Extract Primitives -> Merge Collinear
-    snapped_polys = manhattan_snap(raw_polys, tolerance=6.0)
-    lines = extract_primitives(snapped_polys)
+    # 5. Snap to Manhattan Grid if regularized
+    if apply_regression:
+        clean_polys = manhattan_snap(raw_polys, tolerance=5.0)
+    else:
+        clean_polys = raw_polys
     
-    # 6. Classification & OCR
-    classified_lines = classify_lines(lines, orig_w, orig_h, plan_type)
+    # 6. Classification & OCR Texts
+    classified = classify_polygons(clean_polys, orig_w, orig_h, plan_type)
     texts = get_preset_texts(plan_type, orig_w, orig_h)
     
+    # Extract discrete lines for clients that support line rendering
+    lines = []
+    for item in classified:
+        poly = item['pts']
+        layer = item['layer']
+        n = len(poly)
+        if n >= 2:
+            for i in range(n):
+                p1 = poly[i]
+                p2 = poly[(i + 1) % n]
+                lines.append({'x1': p1['x'], 'y1': p1['y'], 'x2': p2['x'], 'y2': p2['y'], 'layer': layer})
+                
     scale_m_per_px = 0.01550 if plan_type == 'plan6_5thave' else 0.01405
     s = scale_m_per_px
     
@@ -263,7 +238,7 @@ def process_image(img_bytes, epsilon=2.0):
     doc.layers.add('A-ANNO', color=3)
     doc.layers.add('A-DIMS', color=1)
     
-    for l in classified_lines:
+    for l in lines:
         msp.add_line((l['x1']*s, (orig_h - l['y1'])*s), (l['x2']*s, (orig_h - l['y2'])*s), dxfattribs={'layer': l['layer']})
         
     for t in texts:
@@ -275,12 +250,16 @@ def process_image(img_bytes, epsilon=2.0):
     doc.write(stream)
     
     return {
-        'width': orig_w, 'height': orig_h, 'plan_type': plan_type, 'scale_m_per_px': scale_m_per_px,
-        'lines': classified_lines, 'arcs': [], 'texts': texts, 'dxf': stream.getvalue()
+        'width': orig_w,
+        'height': orig_h,
+        'plan_type': plan_type,
+        'scale_m_per_px': scale_m_per_px,
+        'polygons': classified,
+        'lines': lines,
+        'arcs': [],
+        'texts': texts,
+        'dxf': stream.getvalue()
     }
-
-from http.server import BaseHTTPRequestHandler
-import cgi
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -292,33 +271,34 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
-            if ctype == 'multipart/form-data':
-                pdict['boundary'] = bytes(pdict['boundary'], 'utf-8')
-                pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
-                form = cgi.parse_multipart(self.rfile, pdict)
-                file_item = form.get('image', [None])[0]
-            else:
-                length = int(self.headers.get('content-length'))
-                file_item = self.rfile.read(length)
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            req = json.loads(body.decode('utf-8'))
 
-            if not file_item:
-                raise ValueError("No image provided")
+            img_b64 = req.get('image', '')
+            if ',' in img_b64:
+                img_b64 = img_b64.split(',', 1)[1]
+            img_bytes = base64.b64decode(img_b64)
 
-            result = process_image(file_item)
+            threshold = int(req.get('threshold', 180))
+            epsilon = float(req.get('epsilon', 2.0))
+            apply_regression = bool(req.get('apply_regression', True))
+
+            result = process_image(
+                img_bytes=img_bytes,
+                threshold=threshold,
+                epsilon=epsilon,
+                apply_regression=apply_regression
+            )
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            
-            # Ensure arcs is present even if empty
-            if 'arcs' not in result:
-                result['arcs'] = []
-                
             self.wfile.write(json.dumps(result).encode('utf-8'))
         except Exception as e:
             self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
