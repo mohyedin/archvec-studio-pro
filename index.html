@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArchVec Studio Pro 2026 — AI Architectural CAD Vectorizer</title>
+  
+  <!-- Tesseract.js for Neural OCR Fallback -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <style>
+    :root {
+      --acad-bg: #1e1e1e;
+      --acad-panel: #252526;
+      --acad-header: #2d2d30;
+      --acad-border: #3e3e42;
+      --acad-accent: #007acc;
+      --acad-accent-hover: #1f8ad2;
+      --acad-text: #cccccc;
+      --acad-text-bright: #ffffff;
+      --acad-canvas-bg: #181818;
+      --acad-grid: #262628;
+      --acad-cmd-bg: #1b1b1c;
+      --layer-wall: #38bdf8;
+      --layer-furn: #00e5ff;
+      --layer-dims: #ff3366;
+      --layer-anno: #ffcc00;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--acad-bg);
+      color: var(--acad-text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header Bar */
+    header {
+      background: var(--acad-header);
+      border-bottom: 1px solid var(--acad-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .acad-title-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 14px;
+      font-size: 12px;
+      background: #1f1f22;
+      border-bottom: 1px solid #2d2d30;
+    }
+
+    .acad-title-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .acad-logo-badge {
+      background: linear-gradient(135deg, #007acc, #00d2ff);
+      color: #fff;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .acad-app-name {
+      color: var(--acad-text-bright);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .acad-quick-tools {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .acad-quick-tools i:hover {
+      color: var(--acad-text-bright);
+      cursor: pointer;
+    }
+
+    /* Ribbon Tabs */
+    .acad-ribbon-tabs {
+      display: flex;
+      padding: 0 8px;
+      background: #252526;
+      border-bottom: 1px solid var(--acad-border);
+    }
+
+    .ribbon-tab {
+      padding: 7px 16px;
+      font-size: 12px;
+      color: var(--acad-text);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ribbon-tab:hover {
+      color: var(--acad-text-bright);
+      background: #2d2d30;
+    }
+
+    .ribbon-tab.active {
+      color: var(--acad-text-bright);
+      border-bottom: 2px solid var(--acad-accent);
+      background: #2a2d2e;
+      font-weight: 600;
+    }
+
+    /* Workspace */
+    .acad-workspace {
+      display: flex;
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Left Toolbar */
+    .acad-left-tools {
+      width: 46px;
+      background: var(--acad-panel);
+      border-right: 1px solid var(--acad-border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .tool-btn {
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      color: #999;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.15s;
+    }
+
+    .tool-btn:hover {
+      background: #333337;
+      color: var(--acad-text-bright);
+    }
+
+    .tool-btn.active {
+      background: var(--acad-accent);
+      color: #fff;
+    }
+
+    .tool-separator {
+      width: 24px;
+      height: 1px;
+      background: var(--acad-border);
+      margin: 4px 0;
+    }
+
+    /* Viewport / Canvas */
+    .acad-canvas-container {
+      flex: 1;
+      position: relative;
+      background: var(--acad-canvas-bg);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #cadCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    /* HUD Overlays */
+    .viewport-overlay {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(30, 30, 30, 0.88);
+      border: 1px solid var(--acad-border);
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #bbb;
+      backdrop-filter: blur(4px);
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .viewport-overlay span b {
+      color: var(--acad-text-bright);
+    }
+
+    .view-cube {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 60px;
+      height: 60px;
+      background: rgba(45, 45, 48, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #aaa;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+    }
+
+    .view-cube-compass {
+      font-weight: 800;
+      color: #e51c23;
+      font-size: 10px;
+    }
+
+    /* Right Panels */
+    .acad-right-panel {
+      width: 350px;
+      background: var(--acad-panel);
+      border-left: 1px solid var(--acad-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .panel-view {
+      display: none;
+      flex-direction: column;
+    }
+
+    .panel-view.active {
+      display: flex;
+    }
+
+    .panel-header {
+      padding: 10px 14px;
+      background: #2d2d30;
+      border-bottom: 1px solid var(--acad-border);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--acad-text-bright);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-section {
+      padding: 14px;
+      border-bottom: 1px solid #333337;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Dropzone */
+    .acad-dropzone {
+      border: 2px dashed #444;
+      border-radius: 6px;
+      padding: 16px 12px;
+      text-align: center;
+      cursor: pointer;
+      background: #1f1f22;
+      transition: all 0.2s;
+    }
+
+    .acad-dropzone:hover {
+      border-color: var(--acad-accent);
+      background: #252830;
+    }
+
+    .acad-dropzone i {
+      font-size: 24px;
+      color: var(--acad-accent);
+      margin-bottom: 6px;
+    }
+
+    .acad-dropzone p {
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .acad-dropzone small {
+      font-size: 10px;
+      color: #666;
+      display: block;
+      margin-top: 4px;
+    }
+
+    /* Preset Chips */
+    .preset-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .chip-btn {
+      background: #333337;
+      border: 1px solid #444;
+      color: #ccc;
+      font-size: 11px;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chip-btn:hover {
+      background: #44444a;
+      color: #fff;
+    }
+
+    .chip-btn.active {
+      background: var(--acad-accent);
+      border-color: var(--acad-accent);
+      color: #fff;
+    }
+
+    /* Form Controls */
+    .control-group {
+      margin-bottom: 10px;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #aaa;
+      margin-bottom: 4px;
+    }
+
+    .control-slider {
+      width: 100%;
+      height: 4px;
+      background: #444;
+      border-radius: 2px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .control-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--acad-accent);
+      cursor: pointer;
+    }
+
+    .control-checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #ccc;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .control-checkbox-label input {
+      accent-color: var(--acad-accent);
+    }
+
+    /* Layer Items */
+    .layer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      background: #1f1f22;
+      border: 1px solid #333;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      font-size: 11px;
+    }
+
+    .layer-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .layer-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+
+    .layer-actions {
+      display: flex;
+      gap: 10px;
+      color: #777;
+    }
+
+    .layer-actions i:hover {
+      color: #fff;
+      cursor: pointer;
+    }
+
+    /* Action Buttons */
+    .acad-btn {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: none;
+      transition: all 0.2s;
+      margin-bottom: 8px;
+    }
+
+    .btn-primary { background: var(--acad-accent); color: #fff; }
+    .btn-primary:hover { background: var(--acad-accent-hover); }
+    .btn-success { background: #0e8a16; color: #fff; }
+    .btn-success:hover { background: #159c1e; }
+    .btn-secondary { background: #333337; color: #ccc; border: 1px solid #444; }
+    .btn-secondary:hover { background: #3e3e44; color: #fff; }
+
+    /* Bottom Command Line */
+    .acad-bottom-bar {
+      background: var(--acad-header);
+      border-top: 1px solid var(--acad-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .acad-cmd-line {
+      background: var(--acad-cmd-bg);
+      border-top: 1px solid #333;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      color: #88c0d0;
+    }
+
+    .cmd-prompt { color: #888; }
+    .cmd-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+      flex: 1;
+    }
+
+    .acad-status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 12px;
+      font-size: 11px;
+      background: #1f1f22;
+      color: #777;
+    }
+
+    .status-left { display: flex; gap: 16px; font-family: "Consolas", monospace; }
+    .status-right { display: flex; gap: 10px; }
+    .status-toggle { padding: 2px 6px; border-radius: 2px; cursor: pointer; }
+    .status-toggle.on { background: #333338; color: var(--acad-accent); font-weight: bold; }
+
+    /* Modal Backdrop */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-box {
+      background: #252526;
+      border: 1px solid var(--acad-border);
+      border-radius: 8px;
+      width: 90%;
+      max-width: 420px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+
+    .modal-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--acad-text-bright);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: #181818;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 14px;
+      font-family: "Consolas", monospace;
+      outline: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header Bar -->
+  <header>
+    <div class="acad-title-bar">
+      <div class="acad-title-left">
+        <span class="acad-logo-badge">ArchVec Pro</span>
+        <span class="acad-app-name">CAD Studio 2026</span>
+        <span style="color:#555;">|</span>
+        <span style="color:#888; font-size:11px;">[Model Space - Metric 1:100]</span>
+      </div>
+      <div class="acad-quick-tools">
+        <i class="fa-solid fa-folder-open" title="Upload Blueprint" onclick="document.getElementById('fileInput').click()"></i>
+        <i class="fa-solid fa-ruler" title="Calibrate Metric Scale" onclick="startScaleCalibration()"></i>
+        <i class="fa-solid fa-floppy-disk" title="Download AutoCAD DXF" onclick="downloadDXF()"></i>
+        <i class="fa-solid fa-maximize" title="Zoom Extents (ZE)" onclick="resetView()"></i>
+      </div>
+    </div>
+
+    <!-- Ribbon Tabs -->
+    <div class="acad-ribbon-tabs">
+      <div class="ribbon-tab active" onclick="switchTab('tabVectorizer')"><i class="fa-solid fa-vector-square"></i> Vectorizer</div>
+      <div class="ribbon-tab" onclick="switchTab('tabLayers')"><i class="fa-solid fa-layer-group"></i> Layer Manager</div>
+      <div class="ribbon-tab" onclick="switchTab('tab3D')"><i class="fa-solid fa-cube"></i> 3D / BIM View</div>
+      <div class="ribbon-tab" onclick="switchTab('tabBlocks')"><i class="fa-solid fa-shapes"></i> Block Library (AI)</div>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <div class="acad-workspace">
+    
+    <!-- Left Tool Palette -->
+    <div class="acad-left-tools">
+      <div class="tool-btn active" id="toolSelect" title="Select / Pan (Esc)" onclick="setTool('select')"><i class="fa-solid fa-arrow-pointer"></i></div>
+      <div class="tool-btn" id="toolScale" title="Calibrate Scale (2 Points)" onclick="startScaleCalibration()"><i class="fa-solid fa-ruler-combined"></i></div>
+      <div class="tool-btn" id="toolMeasure" title="Measure Distance" onclick="setTool('measure')"><i class="fa-solid fa-ruler-horizontal"></i></div>
+      <div class="tool-separator"></div>
+      <div class="tool-btn" id="toolRegress" title="Toggle Linear Regression" onclick="toggleOption('chkRegression')"><i class="fa-solid fa-bezier-curve"></i></div>
+      <div class="tool-btn" id="toolArc" title="Toggle 2nd-Degree Quadratic Arc" onclick="toggleOption('chkArc')"><i class="fa-solid fa-circle-notch"></i></div>
+      <div class="tool-btn" id="toolText" title="Toggle Text Annotations" onclick="toggleOption('chkOCR')"><i class="fa-solid fa-font"></i></div>
+      <div class="tool-separator"></div>
+      <div class="tool-btn" title="Zoom Extents (ZE)" onclick="resetView()"><i class="fa-solid fa-maximize"></i></div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="acad-canvas-container" id="canvasContainer">
+      <canvas id="cadCanvas"></canvas>
+      
+      <!-- HUD Overlay -->
+      <div class="viewport-overlay">
+        <span>Units: <b>Meters (m)</b></span>
+        <span>Scale: <b id="hudScale">1px = 14.05 mm</b></span>
+        <span>Entities: <b id="entityCount">0 Polylines</b></span>
+      </div>
+
+      <!-- View Cube -->
+      <div class="view-cube">
+        <span class="view-cube-compass">N</span>
+        <b id="viewCubeLabel">TOP</b>
+        <span style="font-size:8px;">WCS</span>
+      </div>
+    </div>
+
+    <!-- Right Panels -->
+    <div class="acad-right-panel">
+      
+      <!-- TAB 1: VECTORIZER -->
+      <div class="panel-view active" id="tabVectorizer">
+        <div class="panel-header">
+          <span><i class="fa-solid fa-sliders"></i> CAD Vectorizer Engine</span>
+          <span id="serverBadge" style="font-size:10px; background:#0e8a16; color:#fff; padding:2px 6px; border-radius:3px;">ONLINE</span>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-title"><i class="fa-solid fa-image"></i> Source Raster Blueprint</div>
+          <div class="acad-dropzone" id="dropzone">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <p>Drop Floor Plan Image Here</p>
+            <small>PNG, JPG, WEBP or Blueprint Scan</small>
+            <input type="file" id="fileInput" accept="image/*" style="display:none;">
+          </div>
+
+          <div class="section-title" style="margin-top:12px;"><i class="fa-solid fa-bookmark"></i> Architectural Presets</div>
+          <div class="preset-chips">
+            <button class="chip-btn" onclick="loadPreset('plan1')">Plan 1 (71 m²)</button>
+            <button class="chip-btn" onclick="loadPreset('plan2')">Plan 2 (Stairs)</button>
+            <button class="chip-btn" onclick="loadPreset('plan3')">Plan 3 (Residence)</button>
+            <button class="chip-btn" onclick="loadPreset('plan4')">Plan 4 (Luxury)</button>
+            <button class="chip-btn" onclick="loadPreset('plan5')">Plan 5 (3rd Floor)</button>
+            <button class="chip-btn" onclick="loadPreset('plan6')">Plan 6 (5th Ave)</button>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-title"><i class="fa-solid fa-microchip"></i> Geometry Solvers</div>
+          
+          <label class="control-checkbox-label">
+            <input type="checkbox" id="chkRegression" checked>
+            <span><b>Degree-1 Linear Regression (TLS)</b></span>
+          </label>
+          
+          <label class="control-checkbox-label">
+            <input type="checkbox" id="chkArc" checked>
+            <span><b>Degree-2 Quadratic Arc Solver</b></span>
+          </label>
+
+          <label class="control-checkbox-label">
+            <input type="checkbox" id="chkOCR" checked>
+            <span><b>Neural OCR Room & Dimension Extraction</b></span>
+          </label>
+
+          <div class="control-group" style="margin-top:10px;">
+            <div class="control-label">
+              <span>Adaptive Threshold</span>
+              <span id="lblThreshold">180</span>
+            </div>
+            <input type="range" class="control-slider" id="rngThreshold" min="50" max="240" value="180">
+          </div>
+
+          <div class="control-group">
+            <div class="control-label">
+              <span>Tolerance Epsilon (ε)</span>
+              <span id="lblEpsilon">1.8</span>
+            </div>
+            <input type="range" class="control-slider" id="rngEpsilon" min="0.5" max="5.0" step="0.1" value="1.8">
+          </div>
+
+          <button class="acad-btn btn-primary" id="btnVectorize" onclick="runVectorize()">
+            <i class="fa-solid fa-bolt"></i> Vectorize to CAD Layers
+          </button>
+          
+          <button class="acad-btn btn-secondary" onclick="startScaleCalibration()">
+            <i class="fa-solid fa-ruler-combined"></i> Two-Point Scale Calibrator
+          </button>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-title"><i class="fa-solid fa-file-export"></i> CAD Deliverables</div>
+          <button class="acad-btn btn-success" onclick="downloadDXF()">
+            <i class="fa-solid fa-download"></i> Download AutoCAD DXF (R12)
+          </button>
+          <button class="acad-btn btn-secondary" onclick="downloadSVG()">
+            <i class="fa-solid fa-file-code"></i> Download Scaled SVG
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 2: LAYER MANAGER -->
+      <div class="panel-view" id="tabLayers">
+        <div class="panel-header">
+          <span><i class="fa-solid fa-layer-group"></i> AutoCAD Layer Properties</span>
+        </div>
+        <div class="panel-section">
+          <div class="layer-row">
+            <div class="layer-info">
+              <div class="layer-swatch" style="background:var(--layer-wall);"></div>
+              <span><b>A-WALL</b> (Structural Walls)</span>
+            </div>
+            <div class="layer-actions">
+              <input type="checkbox" id="chkLayWall" checked onchange="toggleLayer('A-WALL', this.checked)">
+            </div>
+          </div>
+
+          <div class="layer-row">
+            <div class="layer-info">
+              <div class="layer-swatch" style="background:var(--layer-furn);"></div>
+              <span><b>A-FURN</b> (Furniture & Doors)</span>
+            </div>
+            <div class="layer-actions">
+              <input type="checkbox" id="chkLayFurn" checked onchange="toggleLayer('A-FURN', this.checked)">
+            </div>
+          </div>
+
+          <div class="layer-row">
+            <div class="layer-info">
+              <div class="layer-swatch" style="background:var(--layer-dims);"></div>
+              <span><b>A-DIMS</b> (Dimension Lines)</span>
+            </div>
+            <div class="layer-actions">
+              <input type="checkbox" id="chkLayDims" checked onchange="toggleLayer('A-DIMS', this.checked)">
+            </div>
+          </div>
+
+          <div class="layer-row">
+            <div class="layer-info">
+              <div class="layer-swatch" style="background:var(--layer-anno);"></div>
+              <span><b>A-ANNO</b> (Room Text Labels)</span>
+            </div>
+            <div class="layer-actions">
+              <input type="checkbox" id="chkLayAnno" checked onchange="toggleLayer('A-ANNO', this.checked)">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-title"><i class="fa-solid fa-eye"></i> Viewport Display</div>
+          <div class="control-group">
+            <div class="control-label">
+              <span>Raster Underlay Opacity</span>
+              <span id="lblOpacity">25%</span>
+            </div>
+            <input type="range" class="control-slider" id="rngOpacity" min="0" max="100" value="25" oninput="setOpacity(this.value)">
+          </div>
+          <div class="control-group">
+            <div class="control-label">
+              <span>Vector Line Weight</span>
+              <span id="lblWeight">2.0px</span>
+            </div>
+            <input type="range" class="control-slider" id="rngWeight" min="1" max="5" step="0.5" value="2.0" oninput="setLineWeight(this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: 3D / BIM VIEW -->
+      <div class="panel-view" id="tab3D">
+        <div class="panel-header">
+          <span><i class="fa-solid fa-cube"></i> 3D Isometric BIM View</span>
+        </div>
+        <div class="panel-section">
+          <p style="font-size:12px; color:#aaa; margin-bottom:12px;">
+            Generates a real-time isometric 3D wireframe projection from 2D CAD polygons.
+          </p>
+          <div class="control-group">
+            <div class="control-label">
+              <span>Wall Extrusion Height</span>
+              <span id="lblWallHeight">2.80 m</span>
+            </div>
+            <input type="range" class="control-slider" id="rngWallHeight" min="1.0" max="5.0" step="0.1" value="2.8" oninput="setWallHeight(this.value)">
+          </div>
+          <button class="acad-btn btn-primary" id="btnToggle3D" onclick="toggle3DView()">
+            <i class="fa-solid fa-cube"></i> <span id="lbl3DBtn">Switch to 3D Isometric View</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 4: BLOCK LIBRARY (AI) -->
+      <div class="panel-view" id="tabBlocks">
+        <div class="panel-header">
+          <span><i class="fa-solid fa-shapes"></i> AI CAD Block Library</span>
+        </div>
+        <div class="panel-section">
+          <p style="font-size:12px; color:#aaa; margin-bottom:12px;">
+            Standard architectural symbols ready for automated semantic replacement:
+          </p>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <div style="background:#1f1f22; border:1px solid #333; border-radius:4px; padding:10px; text-align:center;">
+              <i class="fa-solid fa-door-open" style="font-size:20px; color:#00e5ff; margin-bottom:4px;"></i>
+              <div style="font-size:11px; font-weight:600; color:#fff;">Single Door (90°)</div>
+              <div style="font-size:10px; color:#777;">AIA Block D-01</div>
+            </div>
+            <div style="background:#1f1f22; border:1px solid #333; border-radius:4px; padding:10px; text-align:center;">
+              <i class="fa-solid fa-table-cells" style="font-size:20px; color:#00e5ff; margin-bottom:4px;"></i>
+              <div style="font-size:11px; font-weight:600; color:#fff;">Sliding Window</div>
+              <div style="font-size:10px; color:#777;">AIA Block W-02</div>
+            </div>
+            <div style="background:#1f1f22; border:1px solid #333; border-radius:4px; padding:10px; text-align:center;">
+              <i class="fa-solid fa-bed" style="font-size:20px; color:#00e5ff; margin-bottom:4px;"></i>
+              <div style="font-size:11px; font-weight:600; color:#fff;">King Bed (2.0m)</div>
+              <div style="font-size:10px; color:#777;">AIA Block F-10</div>
+            </div>
+            <div style="background:#1f1f22; border:1px solid #333; border-radius:4px; padding:10px; text-align:center;">
+              <i class="fa-solid fa-toilet" style="font-size:20px; color:#00e5ff; margin-bottom:4px;"></i>
+              <div style="font-size:11px; font-weight:600; color:#fff;">Water Closet (WC)</div>
+              <div style="font-size:10px; color:#777;">AIA Block P-04</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Bottom Command Line -->
+  <div class="acad-bottom-bar">
+    <div class="acad-cmd-line">
+      <span class="cmd-prompt">Command:</span>
+      <input type="text" class="cmd-input" id="cmdInput" placeholder="Type a command (VECTORIZE, CAL, ZE, DXF)..." onkeydown="handleCmd(event)">
+    </div>
+
+    <!-- Status Bar -->
+    <div class="acad-status-bar">
+      <div class="status-left">
+        <span id="coordDisplay">X: 0.00m, Y: 0.00m, Z: 0.00m</span>
+      </div>
+      <div class="status-right">
+        <span class="status-toggle on" id="togModel">MODEL</span>
+        <span class="status-toggle on" id="togGrid" onclick="toggleGrid()">GRID</span>
+        <span class="status-toggle on" id="togOrtho" onclick="toggleOrtho()">ORTHO</span>
+        <span class="status-toggle on">POLAR</span>
+        <span class="status-toggle on">OSNAP</span>
+        <span class="status-toggle on">DYN</span>
+        <span class="status-toggle" id="hudScaleStatus">1:100m</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Two-Point Scale Calibration Modal -->
+  <div class="modal-backdrop" id="modalScale">
+    <div class="modal-box">
+      <div class="modal-title"><i class="fa-solid fa-ruler-combined" style="color:var(--acad-accent);"></i> Two-Point Metric Scale Calibration</div>
+      <p style="font-size:12px; color:#aaa;">You selected 2 reference points across a known architectural dimension.</p>
+      <div style="font-size:12px; color:#ccc;">
+        <label style="display:block; margin-bottom:6px;">Enter real-world length in meters:</label>
+        <input type="number" step="0.01" min="0.1" class="modal-input" id="txtRealMeters" value="5.37">
+      </div>
+      <div class="modal-actions">
+        <button class="acad-btn btn-secondary" style="width:auto; margin:0;" onclick="cancelScaleModal()">Cancel</button>
+        <button class="acad-btn btn-primary" style="width:auto; margin:0;" onclick="applyScaleModal()">Apply Calibration</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script>
+    const canvas = document.getElementById('cadCanvas');
+    const ctx = canvas.getContext('2d');
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+
+    let currentImage = null;
+    let currentPolygons = [];
+    let currentTexts = [];
+    let currentDXF = "";
+    let scale_m_per_px = 0.01405;
+    let panX = 0, panY = 0, zoom = 1.0;
+    let isPanning = false, startPanX = 0, startPanY = 0;
+    let activeTool = 'select';
+    let is3DMode = false;
+    let wallHeightM = 2.80;
+    let underlayOpacity = 0.25;
+    let vectorLineWidth = 2.0;
+    let showGrid = true;
+    let orthoSnap = true;
+
+    let layersVisible = {
+      'A-WALL': true,
+      'A-FURN': true,
+      'A-DIMS': true,
+      'A-ANNO': true
+    };
+
+    let scalePoints = [];
+    let measurePoints = [];
+
+    function resizeCanvas() {
+      const container = document.getElementById('canvasContainer');
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      drawScene();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // Tab Switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.ribbon-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel-view').forEach(p => p.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+      if (tabId === 'tab3D' && !is3DMode) toggle3DView();
+      else if (tabId !== 'tab3D' && is3DMode) toggle3DView();
+    }
+
+    // Dropzone
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.borderColor = '#007acc'; });
+    dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = '#444'; });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = '#444';
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          currentImage = img;
+          logCmd(`Loaded: ${file.name} (${img.width}x${img.height} px)`);
+          resetView();
+          runVectorize();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Presets
+    function loadPreset(key) {
+      logCmd(`Loading Preset Architecture Plan: ${key}...`);
+      document.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('active'));
+      if (event && event.target) event.target.classList.add('active');
+
+      const presetFiles = {
+        'plan1': '/presets/plan1.png',
+        'plan2': '/presets/plan2.jpg',
+        'plan3': '/presets/plan3.png',
+        'plan4': '/presets/plan4.png',
+        'plan5': '/presets/plan5.png',
+        'plan6': '/presets/plan6.png'
+      };
+
+      const img = new Image();
+      img.onload = () => {
+        currentImage = img;
+        resetView();
+        runVectorize();
+      };
+      img.onerror = () => {
+        logCmd(`Loading preset ${key}...`);
+        runVectorize();
+      };
+      img.src = presetFiles[key] || '/presets/plan1.png';
+    }
+
+    // Tools
+    function setTool(tool) {
+      activeTool = tool;
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      if (tool === 'select') document.getElementById('toolSelect').classList.add('active');
+      if (tool === 'measure') document.getElementById('toolMeasure').classList.add('active');
+      measurePoints = [];
+      logCmd(`Active Tool: ${tool.toUpperCase()}`);
+    }
+
+    function toggleOption(optId) {
+      const chk = document.getElementById(optId);
+      chk.checked = !chk.checked;
+      logCmd(`Toggled ${optId}: ${chk.checked ? 'ENABLED' : 'DISABLED'}`);
+      runVectorize();
+    }
+
+    function toggleLayer(layer, isVis) {
+      layersVisible[layer] = isVis;
+      logCmd(`Layer ${layer} visibility: ${isVis ? 'ON' : 'OFF'}`);
+      drawScene();
+    }
+
+    function setOpacity(val) {
+      underlayOpacity = val / 100.0;
+      document.getElementById('lblOpacity').innerText = val + '%';
+      drawScene();
+    }
+
+    function setLineWeight(val) {
+      vectorLineWidth = parseFloat(val);
+      document.getElementById('lblWeight').innerText = val + 'px';
+      drawScene();
+    }
+
+    function setWallHeight(val) {
+      wallHeightM = parseFloat(val);
+      document.getElementById('lblWallHeight').innerText = val + ' m';
+      if (is3DMode) drawScene();
+    }
+
+    function toggleGrid() {
+      showGrid = !showGrid;
+      document.getElementById('togGrid').classList.toggle('on', showGrid);
+      drawScene();
+    }
+
+    function toggleOrtho() {
+      orthoSnap = !orthoSnap;
+      document.getElementById('togOrtho').classList.toggle('on', orthoSnap);
+      logCmd(`Ortho Mode: ${orthoSnap ? 'ON' : 'OFF'}`);
+    }
+
+    function toggle3DView() {
+      is3DMode = !is3DMode;
+      document.getElementById('lbl3DBtn').innerText = is3DMode ? 'Return to 2D Plan View' : 'Switch to 3D Isometric View';
+      document.getElementById('viewCubeLabel').innerText = is3DMode ? 'ISOMETRIC' : 'TOP';
+      logCmd(`Viewport View: ${is3DMode ? '3D ISOMETRIC BIM' : '2D MODEL PLAN'}`);
+      drawScene();
+    }
+
+    // Scale Calibration Tool
+    function startScaleCalibration() {
+      activeTool = 'scale';
+      scalePoints = [];
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('toolScale').classList.add('active');
+      logCmd("Scale Calibration: Click Point 1 (Start of reference dimension line)");
+    }
+
+    function cancelScaleModal() {
+      document.getElementById('modalScale').style.display = 'none';
+      scalePoints = [];
+      setTool('select');
+      drawScene();
+    }
+
+    function applyScaleModal() {
+      const realMeters = parseFloat(document.getElementById('txtRealMeters').value) || 5.37;
+      if (scalePoints.length === 2) {
+        const dx = scalePoints[1].x - scalePoints[0].x;
+        const dy = scalePoints[1].y - scalePoints[0].y;
+        const pixelDist = Math.hypot(dx, dy);
+        if (pixelDist > 5) {
+          scale_m_per_px = realMeters / pixelDist;
+          const mmVal = (scale_m_per_px * 1000).toFixed(2);
+          document.getElementById('hudScale').innerText = `1px = ${mmVal} mm`;
+          document.getElementById('hudScaleStatus').innerText = `1px=${mmVal}mm`;
+          logCmd(`Calibrated Metric Scale: 1px = ${mmVal} mm (${scale_m_per_px.toFixed(6)} m/px)`);
+        }
+      }
+      document.getElementById('modalScale').style.display = 'none';
+      scalePoints = [];
+      setTool('select');
+      drawScene();
+    }
+
+    // Vectorize API Call + Dynamic Neural OCR Fallback
+    async function runVectorize() {
+      if (!currentImage) {
+        logCmd("Error: No blueprint image loaded. Please upload a plan first.");
+        return;
+      }
+
+      logCmd("Running CAD Vectorizer (Lanczos4 + Suzuki-Abe + Degree 1/2 Solvers)...");
+      document.getElementById('btnVectorize').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing Geometry...';
+
+      const threshold = parseInt(document.getElementById('rngThreshold').value);
+      const epsilon = parseFloat(document.getElementById('rngEpsilon').value);
+      const applyRegression = document.getElementById('chkRegression').checked;
+      const doOCR = document.getElementById('chkOCR').checked;
+
+      try {
+        const resp = await fetch('/api/vectorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: currentImage.src,
+            threshold: threshold,
+            epsilon: epsilon,
+            apply_regression: applyRegression
+          })
+        });
+
+        if (!resp.ok) throw new Error("Status " + resp.status);
+
+        const data = await resp.json();
+        currentPolygons = data.polygons || [];
+        currentTexts = data.texts || [];
+        currentDXF = data.dxf || "";
+        if (data.scale_m_per_px) {
+          scale_m_per_px = data.scale_m_per_px;
+          const mmVal = (scale_m_per_px * 1000).toFixed(2);
+          document.getElementById('hudScale').innerText = `1px = ${mmVal} mm`;
+        }
+
+        // If backend returned no texts and user enabled OCR, run client-side neural OCR
+        if (doOCR && currentTexts.length === 0 && typeof Tesseract !== 'undefined') {
+          runClientNeuralOCR();
+        }
+
+        document.getElementById('entityCount').innerText = `${currentPolygons.length} Polylines, ${currentTexts.length} Text Entities`;
+        logCmd(`Complete: ${currentPolygons.length} CAD polylines, ${currentTexts.length} native TEXT entities.`);
+        drawScene();
+      } catch (err) {
+        logCmd(`Notice: Backend offline (${err.message}) - running local renderer.`);
+        if (doOCR && currentTexts.length === 0 && typeof Tesseract !== 'undefined') runClientNeuralOCR();
+        drawScene();
+      } finally {
+        document.getElementById('btnVectorize').innerHTML = '<i class="fa-solid fa-bolt"></i> Vectorize to CAD Layers';
+      }
+    }
+
+    async function runClientNeuralOCR() {
+      try {
+        logCmd("Neural OCR: Scanning raster blueprint for room names and dimension tags...");
+        const result = await Tesseract.recognize(currentImage.src, 'eng', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              logCmd(`Neural OCR: Recognizing text... ${(m.progress*100).toFixed(0)}%`);
+            }
+          }
+        });
+
+        const lines = result.data.lines || [];
+        const detected = [];
+        for (const line of lines) {
+          const text = line.text.trim();
+          if (text.length >= 2 && line.confidence > 35) {
+            const bbox = line.bbox;
+            const cx = (bbox.x0 + bbox.x1) / 2;
+            const cy = (bbox.y0 + bbox.y1) / 2;
+            const isDim = /[\d'"]/.test(text);
+            detected.push({
+              text: text,
+              x: Math.round(cx),
+              y: Math.round(cy),
+              layer: isDim ? 'A-DIMS' : 'A-ANNO',
+              size: Math.max(12, Math.min(20, Math.round(bbox.y1 - bbox.y0)))
+            });
+          }
+        }
+        if (detected.length > 0) {
+          currentTexts = detected;
+          document.getElementById('entityCount').innerText = `${currentPolygons.length} Polylines, ${currentTexts.length} Text Entities`;
+          logCmd(`Neural OCR Success: Found ${detected.length} text annotations.`);
+          drawScene();
+        }
+      } catch (e) {
+        console.warn("Client OCR notice:", e);
+      }
+    }
+
+    // Rendering Engine
+    function drawScene() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (showGrid) drawCADGrid();
+
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.scale(zoom, zoom);
+
+      if (is3DMode) {
+        draw3DScene();
+      } else {
+        draw2DScene();
+      }
+
+      // Draw Scale Calibration Points
+      if (scalePoints.length > 0) {
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2.5 / zoom;
+        scalePoints.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 6 / zoom, 0, Math.PI * 2);
+          ctx.fillStyle = '#fbbf24';
+          ctx.fill();
+          ctx.stroke();
+        });
+        if (scalePoints.length === 2) {
+          ctx.beginPath();
+          ctx.moveTo(scalePoints[0].x, scalePoints[0].y);
+          ctx.lineTo(scalePoints[1].x, scalePoints[1].y);
+          ctx.stroke();
+        }
+      }
+
+      // Draw Measure Points
+      if (measurePoints.length > 0) {
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 2.0 / zoom;
+        measurePoints.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 5 / zoom, 0, Math.PI * 2);
+          ctx.fillStyle = '#00e5ff';
+          ctx.fill();
+          ctx.stroke();
+        });
+        if (measurePoints.length === 2) {
+          ctx.beginPath();
+          ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
+          ctx.lineTo(measurePoints[1].x, measurePoints[1].y);
+          ctx.stroke();
+          const distM = (Math.hypot(measurePoints[1].x - measurePoints[0].x, measurePoints[1].y - measurePoints[0].y) * scale_m_per_px).toFixed(2);
+          const midX = (measurePoints[0].x + measurePoints[1].x) / 2;
+          const midY = (measurePoints[0].y + measurePoints[1].y) / 2;
+          ctx.fillStyle = '#fff';
+          ctx.font = `bold ${13/zoom}px "Segoe UI", Arial`;
+          ctx.fillText(`DIST: ${distM} m`, midX + 8/zoom, midY - 8/zoom);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function draw2DScene() {
+      // Underlay
+      if (currentImage && underlayOpacity > 0) {
+        ctx.globalAlpha = underlayOpacity;
+        ctx.drawImage(currentImage, 0, 0);
+        ctx.globalAlpha = 1.0;
+      }
+
+      // Polygons
+      for (const item of currentPolygons) {
+        const poly = item.pts;
+        const layer = item.layer || 'A-WALL';
+        if (!layersVisible[layer]) continue;
+
+        ctx.strokeStyle = (layer === 'A-WALL') ? '#38bdf8' :
+                          (layer === 'A-FURN') ? '#00e5ff' :
+                          (layer === 'A-DIMS') ? '#ff3366' : '#ffcc00';
+        ctx.lineWidth = (layer === 'A-WALL') ? vectorLineWidth / zoom : (vectorLineWidth * 0.7) / zoom;
+        
+        ctx.beginPath();
+        for (let i = 0; i < poly.length; i++) {
+          if (i === 0) ctx.moveTo(poly[i].x, poly[i].y);
+          else ctx.lineTo(poly[i].x, poly[i].y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // Texts with High Visibility
+      if (layersVisible['A-ANNO'] || layersVisible['A-DIMS']) {
+        for (const t of currentTexts) {
+          if (!layersVisible[t.layer] && !(t.layer === 'A-DIMS' && layersVisible['A-DIMS'])) continue;
+          ctx.save();
+          ctx.font = `bold ${(t.size || 14) / zoom}px "Segoe UI", Arial, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#000000';
+          ctx.shadowBlur = 6;
+          ctx.fillStyle = (t.layer === 'A-DIMS') ? '#ff3366' : '#ffcc00';
+          ctx.fillText(t.text, t.x, t.y);
+          ctx.restore();
+        }
+      }
+    }
+
+    function draw3DScene() {
+      const hPx = (wallHeightM / scale_m_per_px) * 0.45;
+      
+      for (const item of currentPolygons) {
+        const poly = item.pts;
+        const layer = item.layer || 'A-WALL';
+        if (!layersVisible[layer]) continue;
+
+        const isWall = (layer === 'A-WALL');
+        const extrude = isWall ? hPx : (hPx * 0.25);
+        ctx.strokeStyle = isWall ? '#38bdf8' : '#00e5ff';
+        ctx.lineWidth = 1.5 / zoom;
+
+        // Bottom base
+        ctx.beginPath();
+        for (let i = 0; i < poly.length; i++) {
+          const pt = poly[i];
+          const px = pt.x - pt.y * 0.35;
+          const py = pt.y * 0.5;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Top cap
+        ctx.beginPath();
+        for (let i = 0; i < poly.length; i++) {
+          const pt = poly[i];
+          const px = pt.x - pt.y * 0.35;
+          const py = pt.y * 0.5 - extrude;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Vertical corner pillars
+        for (let i = 0; i < poly.length; i++) {
+          const pt = poly[i];
+          const px = pt.x - pt.y * 0.35;
+          const py1 = pt.y * 0.5;
+          const py2 = py1 - extrude;
+          ctx.beginPath();
+          ctx.moveTo(px, py1);
+          ctx.lineTo(px, py2);
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawCADGrid() {
+      const gridStep = 40 * zoom;
+      ctx.strokeStyle = '#222224';
+      ctx.lineWidth = 1;
+
+      const offsetX = panX % gridStep;
+      const offsetY = panY % gridStep;
+
+      ctx.beginPath();
+      for (let x = offsetX; x < canvas.width; x += gridStep) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+      }
+      for (let y = offsetY; y < canvas.height; y += gridStep) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+      }
+      ctx.stroke();
+    }
+
+    function resetView() {
+      if (!currentImage) {
+        panX = canvas.width / 2;
+        panY = canvas.height / 2;
+        zoom = 1.0;
+      } else {
+        zoom = Math.min((canvas.width - 80) / currentImage.width, (canvas.height - 80) / currentImage.height);
+        panX = (canvas.width - currentImage.width * zoom) / 2;
+        panY = (canvas.height - currentImage.height * zoom) / 2;
+      }
+      drawScene();
+    }
+
+    // Mouse Interaction
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const wx = (e.clientX - rect.left - panX) / zoom;
+      const wy = (e.clientY - rect.top - panY) / zoom;
+
+      if (activeTool === 'scale') {
+        scalePoints.push({ x: wx, y: wy });
+        if (scalePoints.length === 1) {
+          logCmd("Scale Point 1 recorded. Click Point 2 (End of reference dimension line)");
+        } else if (scalePoints.length === 2) {
+          document.getElementById('modalScale').style.display = 'flex';
+          logCmd("Scale Point 2 recorded. Enter real distance in meters.");
+        }
+        drawScene();
+        return;
+      }
+
+      if (activeTool === 'measure') {
+        measurePoints.push({ x: wx, y: wy });
+        if (measurePoints.length > 2) measurePoints = [{ x: wx, y: wy }];
+        drawScene();
+        return;
+      }
+
+      if (e.button === 0 || e.button === 1) {
+        isPanning = true;
+        startPanX = e.clientX - panX;
+        startPanY = e.clientY - panY;
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isPanning) {
+        panX = e.clientX - startPanX;
+        panY = e.clientY - startPanY;
+        drawScene();
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const wx = (e.clientX - rect.left - panX) / zoom;
+      const wy = (e.clientY - rect.top - panY) / zoom;
+      const meterX = (wx * scale_m_per_px).toFixed(2);
+      const meterY = (wy * scale_m_per_px).toFixed(2);
+      document.getElementById('coordDisplay').innerText = `X: ${meterX}m, Y: ${meterY}m, Z: 0.00m`;
+    });
+
+    window.addEventListener('mouseup', () => { isPanning = false; });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+      panX = mouseX - (mouseX - panX) * zoomFactor;
+      panY = mouseY - (mouseY - panY) * zoomFactor;
+      zoom *= zoomFactor;
+      drawScene();
+    }, { passive: false });
+
+    function logCmd(msg) {
+      document.getElementById('cmdInput').placeholder = msg;
+      console.log("[AutoCAD Command]:", msg);
+    }
+
+    function handleCmd(e) {
+      if (e.key === 'Enter') {
+        const cmd = e.target.value.trim().toUpperCase();
+        logCmd(`Executed: ${cmd}`);
+        if (cmd === 'VECTORIZE' || cmd === 'VEC') runVectorize();
+        else if (cmd === 'CAL' || cmd === 'SCALE') startScaleCalibration();
+        else if (cmd === 'DXF' || cmd === 'SAVE') downloadDXF();
+        else if (cmd === 'ZE' || cmd === 'EXTENTS' || cmd === 'Z') resetView();
+        else if (cmd === '3D') toggle3DView();
+        e.target.value = '';
+      }
+    }
+
+    // DXF Download
+    function downloadDXF() {
+      if (!currentDXF && currentPolygons.length === 0) {
+        logCmd("Error: No CAD vectors to export.");
+        return;
+      }
+      
+      let dxfString = currentDXF;
+      if (!dxfString) {
+        dxfString = "  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\nAC1009\n  0\nENDSEC\n  0\nSECTION\n  2\nTABLES\n  0\nTABLE\n  2\nLAYER\n 70\n4\n  0\nLAYER\n  2\nA-WALL\n 70\n0\n 62\n7\n  6\nCONTINUOUS\n  0\nLAYER\n  2\nA-FURN\n 70\n0\n 62\n30\n  6\nCONTINUOUS\n  0\nLAYER\n  2\nA-DIMS\n 70\n0\n 62\n1\n  6\nCONTINUOUS\n  0\nLAYER\n  2\nA-ANNO\n 70\n0\n 62\n3\n  6\nCONTINUOUS\n  0\nENDTAB\n  0\nENDSEC\n  0\nSECTION\n  2\nENTITIES\n";
+        for (const item of currentPolygons) {
+          const poly = item.pts;
+          const layer = item.layer || 'A-WALL';
+          for (let i = 0; i < poly.length; i++) {
+            const p1 = poly[i], p2 = poly[(i+1)%poly.length];
+            dxfString += `  0\nLINE\n  8\n${layer}\n 10\n${(p1.x*scale_m_per_px).toFixed(4)}\n 20\n${(-p1.y*scale_m_per_px).toFixed(4)}\n 30\n0.0\n 11\n${(p2.x*scale_m_per_px).toFixed(4)}\n 21\n${(-p2.y*scale_m_per_px).toFixed(4)}\n 31\n0.0\n`;
+          }
+        }
+        for (const t of currentTexts) {
+          dxfString += `  0\nTEXT\n  8\n${t.layer || 'A-ANNO'}\n 10\n${(t.x*scale_m_per_px).toFixed(4)}\n 20\n${(-t.y*scale_m_per_px).toFixed(4)}\n 30\n0.0\n 40\n0.25\n  1\n${t.text}\n`;
+        }
+        dxfString += "  0\nENDSEC\n  0\nEOF\n";
+      }
+
+      const blob = new Blob([dxfString], { type: 'application/dxf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `archvec_cad_plan_${Date.now()}.dxf`;
+      link.click();
+      logCmd("Exported: Layered AutoCAD DXF (R12 Metric)");
+    }
+
+    function downloadSVG() {
+      if (currentPolygons.length === 0) return;
+      const w = currentImage ? currentImage.width : 800;
+      const h = currentImage ? currentImage.height : 600;
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="background:#181818">\n`;
+      for (const item of currentPolygons) {
+        const pts = item.pts.map(p => `${p.x},${p.y}`).join(' ');
+        const color = (item.layer === 'A-WALL') ? '#38bdf8' : (item.layer === 'A-FURN') ? '#00e5ff' : '#ff3366';
+        svg += `  <polygon points="${pts}" fill="none" stroke="${color}" stroke-width="2" />\n`;
+      }
+      for (const t of currentTexts) {
+        svg += `  <text x="${t.x}" y="${t.y}" fill="#ffcc00" font-size="14" font-family="Arial">${t.text}</text>\n`;
+      }
+      svg += `</svg>`;
+
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'archvec_plan.svg';
+      link.click();
+    }
+
+    // Initialize with default Plan 1
+    resizeCanvas();
+    loadPreset('plan1');
+  </script>
+</body>
+</html>

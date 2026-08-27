@@ -1,0 +1,10 @@
+{
+  "builds": [
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "api/vectorize.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/api/vectorize", "dest": "/api/vectorize.py" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
+}

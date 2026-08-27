@@ -1,0 +1,7 @@
+{
+  "name": "archvec-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart Raster Floor Plan to Layered CAD Vectorizer (Waifu2x + Metric Scale)",
+  "keywords": ["cad", "dxf", "autocad", "vectorizer", "floorplan"]
+}
