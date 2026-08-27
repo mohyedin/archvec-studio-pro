@@ -893,7 +893,7 @@
     const fileInput = document.getElementById('fileInput');
 
     let currentImage = null;
-    let currentPolygons = [];
+    let currentLines = []; let currentArcs = [];
     let currentTexts = [];
     let currentDXF = "";
     let scale_m_per_px = 0.01405;
@@ -1118,7 +1118,7 @@
         if (!resp.ok) throw new Error("Status " + resp.status);
 
         const data = await resp.json();
-        currentPolygons = data.polygons || [];
+        currentLines = data.lines || []; currentArcs = data.arcs || [];
         currentTexts = data.texts || [];
         currentDXF = data.dxf || "";
         if (data.scale_m_per_px) {
